@@ -86,20 +86,14 @@ func makeEnvConfig(prefix string, v reflect.Value) {
 			} else if err == nil {
 				v.Set(newValue.Elem())
 			} else {
-				log.Error("LoadConfig", map[string]interface{}{
-					"prefix": prefix,
-					"event":  ev,
-					"error":  err.Error(),
-				})
+				log.DefaultLogger.Error(err.Error(), "prefix", prefix, "event", ev)
 			}
 		} else {
-			log.Error("LoadConfig", map[string]interface{}{
-				"prefix":  prefix,
-				"event":   ev,
-				"error":   "Can't set config because CanSet() == false",
-				"varType": t.String(),
-				"value":   v.String(),
-			})
+			log.DefaultLogger.Error("Can't set config because CanSet() == false",
+				"prefix", prefix,
+				"event", ev,
+				"varType", t.String(),
+				"value", v.String())
 		}
 	}
 
