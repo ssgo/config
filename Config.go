@@ -2,8 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	errors2 "errors"
 	"fmt"
-	"github.com/ssgo/log"
 	"os"
 	"os/user"
 	"reflect"
@@ -35,7 +35,7 @@ func ResetConfigEnv() {
 	initConfig()
 }
 
-func LoadConfig(name string, conf interface{}) error {
+func LoadConfig(name string, conf interface{}) []error {
 	if !inited {
 		inited = true
 		initConfig()
@@ -60,23 +60,32 @@ func LoadConfig(name string, conf interface{}) error {
 			}
 		}
 	}
-	err = nil
+
+	errors := make([]error, 0)
 	if file != nil {
 		decoder := json.NewDecoder(file)
-		err = decoder.Decode(conf)
+		err := decoder.Decode(conf)
 		if err != nil {
-			log.DefaultLogger.Error(err.Error(), "file", file.Name())
+			errors = append(errors, err)
 		}
 		_ = file.Close()
 	}
-	makeEnvConfig(name, reflect.ValueOf(conf))
-	return err
+
+	makeEnvConfig(name, reflect.ValueOf(conf), &errors)
+	if len(errors) == 0 {
+		return nil
+	}
+	return errors
 }
 
-func makeEnvConfig(prefix string, v reflect.Value) {
+func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 	for v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
+	if v.Kind() == reflect.Invalid {
+		return
+	}
+
 	t := v.Type()
 	ev := envConfigs[prefix]
 	if ev == "" {
@@ -91,20 +100,23 @@ func makeEnvConfig(prefix string, v reflect.Value) {
 			} else if err == nil {
 				v.Set(newValue.Elem())
 			} else {
-				log.DefaultLogger.Error(err.Error(), "prefix", prefix, "event", ev)
+				*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
 			}
 		} else {
-			log.DefaultLogger.Error("Can't set config because CanSet() == false",
-				"prefix", prefix,
-				"event", ev,
-				"varType", t.String(),
-				"value", v.String())
+			*errors = append(*errors, errors2.New(fmt.Sprint("Can't set config because CanSet() == false",
+				", prefix:", prefix,
+				", event:", ev,
+				", varType:", t.String(),
+				", value:", v.String())))
 		}
 	}
 
 	if t.Kind() == reflect.Struct {
 		for i := 0; i < v.NumField(); i++ {
-			makeEnvConfig(prefix+"_"+v.Type().Field(i).Name, v.Field(i))
+			if v.Field(i).Kind() == reflect.Ptr && v.Field(i).IsNil() {
+				v.Field(i).Set(reflect.New(v.Field(i).Type().Elem()))
+			}
+			makeEnvConfig(prefix+"_"+v.Type().Field(i).Name, v.Field(i), errors)
 		}
 	} else if t.Kind() == reflect.Map {
 		// 查找 环境变量 或 env.json 中是否有配置项
@@ -131,12 +143,14 @@ func makeEnvConfig(prefix string, v reflect.Value) {
 			}
 		}
 		for _, mk := range v.MapKeys() {
-			//log.Println("	---	", prefix, mk)
-			makeEnvConfig(prefix+"_"+mk.String(), v.MapIndex(mk))
+			makeEnvConfig(prefix+"_"+mk.String(), v.MapIndex(mk), errors)
 		}
 	} else if t.Kind() == reflect.Slice {
 		for i := 0; i < v.Len(); i++ {
-			makeEnvConfig(fmt.Sprint(prefix, "_", i), v.Index(i))
+			if v.Index(i).Kind() == reflect.Ptr && v.Index(i).IsNil() {
+				v.Index(i).Set(reflect.New(v.Index(i).Type().Elem()))
+			}
+			makeEnvConfig(fmt.Sprint(prefix, "_", i), v.Index(i), errors)
 		}
 	}
 }
