@@ -60,10 +60,15 @@ func LoadConfig(name string, conf interface{}) error {
 			}
 		}
 	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(conf)
+	err = nil
+	if file != nil {
+		decoder := json.NewDecoder(file)
+		err = decoder.Decode(conf)
+		if err != nil {
+			log.DefaultLogger.Error(err.Error(), "file", file.Name())
+		}
+		_ = file.Close()
+	}
 	makeEnvConfig(name, reflect.ValueOf(conf))
 	return err
 }
