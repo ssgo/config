@@ -45,7 +45,11 @@ func LoadConfig(name string, conf interface{}) []error {
 	var err error
 	lenOsArgs := len(os.Args)
 	if lenOsArgs >= 1 {
-		execPath := os.Args[0][0:strings.LastIndex(os.Args[0], string(os.PathSeparator))]
+		execPath := os.Args[0]
+		pos := strings.LastIndex(os.Args[0], string(os.PathSeparator))
+		if pos != -1 {
+			execPath = os.Args[0][0:pos]
+		}
 		file, err = os.Open(execPath + "/" + name + ".json")
 	}
 	if err != nil || lenOsArgs < 1 {
