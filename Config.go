@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	errors2 "errors"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"os"
 	"os/user"
 	"reflect"
 	"strings"
 )
+
+type openStatusType int
+
+const NONE openStatusType = 0
+const JSON openStatusType = 1
+const YML openStatusType = 2
 
 var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
@@ -18,6 +25,7 @@ func initConfig() {
 	envConf := map[string]interface{}{}
 	LoadConfig("env", &envConf)
 	initEnvConfigFromFile("", reflect.ValueOf(envConf))
+
 	for _, e := range os.Environ() {
 		a := strings.SplitN(e, "=", 2)
 		if len(a) == 2 {
@@ -27,6 +35,9 @@ func initConfig() {
 	for k1, v1 := range envConfigs {
 		envUpperConfigs[strings.ToUpper(k1)] = v1
 	}
+
+	//b, _ := json.MarshalIndent(envUpperConfigs, "", "  ")
+	//fmt.Println(string(b))
 }
 
 func ResetConfigEnv() {
@@ -42,7 +53,7 @@ func LoadConfig(name string, conf interface{}) []error {
 	}
 
 	var file *os.File
-	var err error
+	openStatus := NONE
 	lenOsArgs := len(os.Args)
 	if lenOsArgs >= 1 {
 		execPath := os.Args[0]
@@ -50,16 +61,23 @@ func LoadConfig(name string, conf interface{}) []error {
 		if pos != -1 {
 			execPath = os.Args[0][0:pos]
 		}
-		file, err = os.Open(execPath + "/" + name + ".json")
+		//file, err = os.Open(execPath + "/" + name + ".json")
+		file, openStatus = openFile(execPath + "/" + name)
 	}
-	if err != nil || lenOsArgs < 1 {
-		file, err = os.Open(name + ".json")
-		if err != nil {
-			file, err = os.Open("../" + name + ".json")
-			if err != nil {
+	//if err != nil || lenOsArgs < 1 {
+	if file == nil || lenOsArgs < 1 {
+		//file, err = os.Open(name + ".json")
+		file, openStatus = openFile(name)
+		//if err != nil {
+		if file == nil {
+			//file, err = os.Open("../" + name + ".json")
+			file, openStatus = openFile("../" + name)
+			//if err != nil {
+			if file == nil {
 				u, _ := user.Current()
 				if u != nil {
-					file, err = os.Open(u.HomeDir + "/" + name + ".json")
+					//file, err = os.Open(u.HomeDir + "/" + name + ".json")
+					file, openStatus = openFile(u.HomeDir + "/" + name)
 				}
 			}
 		}
@@ -67,12 +85,22 @@ func LoadConfig(name string, conf interface{}) []error {
 
 	errors := make([]error, 0)
 	if file != nil {
-		decoder := json.NewDecoder(file)
-		err := decoder.Decode(conf)
-		if err != nil {
-			errors = append(errors, err)
+		if openStatus == YML {
+			decoder := yaml.NewDecoder(file)
+			err := decoder.Decode(conf)
+			if err != nil {
+				errors = append(errors, err)
+			}
+			_ = file.Close()
+			//fmt.Println(file.Name(), conf)
+		} else {
+			decoder := json.NewDecoder(file)
+			err := decoder.Decode(conf)
+			if err != nil {
+				errors = append(errors, err)
+			}
+			_ = file.Close()
 		}
-		_ = file.Close()
 	}
 
 	makeEnvConfig(name, reflect.ValueOf(conf), &errors)
@@ -110,8 +138,8 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 			*errors = append(*errors, errors2.New(fmt.Sprint("Can't set config because CanSet() == false",
 				", prefix:", prefix,
 				", event:", ev,
-				", varType:", t.String(),
-				", value:", v.String())))
+				", varType:", fmt.Sprint(t),
+				", value:", toString(v))))
 		}
 	}
 
@@ -126,7 +154,7 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 		// 查找 环境变量 或 env.json 中是否有配置项
 		if t.Elem().Kind() != reflect.Interface {
 			findPrefix := prefix + "_"
-			for k1, _ := range envConfigs {
+			for k1 := range envConfigs {
 				if strings.HasPrefix(k1, findPrefix) || strings.HasPrefix(strings.ToUpper(k1), strings.ToUpper(findPrefix)) {
 					findPostfix := k1[len(findPrefix):]
 					a1 := strings.Split(findPostfix, "_")
@@ -147,7 +175,7 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 			}
 		}
 		for _, mk := range v.MapKeys() {
-			makeEnvConfig(prefix+"_"+mk.String(), v.MapIndex(mk), errors)
+			makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
 		}
 	} else if t.Kind() == reflect.Slice {
 		for i := 0; i < v.Len(); i++ {
@@ -156,6 +184,14 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 			}
 			makeEnvConfig(fmt.Sprint(prefix, "_", i), v.Index(i), errors)
 		}
+	}
+}
+
+func toString(v reflect.Value) string {
+	if v.Kind() == reflect.String {
+		return v.String()
+	} else {
+		return fmt.Sprint(v)
 	}
 }
 
@@ -173,7 +209,7 @@ func initEnvConfigFromFile(prefix string, v reflect.Value) {
 			prefix += "_"
 		}
 		for _, mk := range v.MapKeys() {
-			initEnvConfigFromFile(prefix+mk.String(), v.MapIndex(mk))
+			initEnvConfigFromFile(prefix+toString(mk), v.MapIndex(mk))
 		}
 	} else if t.Kind() == reflect.String {
 		envConfigs[prefix] = v.String()
@@ -185,4 +221,25 @@ func initEnvConfigFromFile(prefix string, v reflect.Value) {
 			envConfigs[prefix] = fmt.Sprint(v.Interface())
 		}
 	}
+}
+
+func openFile(filePrefix string) (*os.File, openStatusType) {
+
+	fi, err := os.Stat(filePrefix + ".yml")
+	if err == nil && fi != nil {
+		file, err := os.Open(filePrefix + ".yml")
+		if err == nil && file != nil {
+			return file, YML
+		}
+	}
+
+	fi, err = os.Stat(filePrefix + ".json")
+	if err == nil && fi != nil {
+		file, err := os.Open(filePrefix + ".json")
+		if err == nil && file != nil {
+			return file, JSON
+		}
+	}
+
+	return nil, NONE
 }

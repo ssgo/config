@@ -1,0 +1,9 @@
+name: test-config
+
+list:
+  aaa:
+    name: 111
+
+list2:
+  - ls -l /
+  - cp a b
