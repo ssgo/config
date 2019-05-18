@@ -104,18 +104,21 @@ func LoadConfig(name string, conf interface{}) []error {
 	}
 
 	makeEnvConfig(name, reflect.ValueOf(conf), &errors)
+	//b, _ := json.MarshalIndent(conf, "", "  ")
+	//fmt.Println(string(b))
+
 	if len(errors) == 0 {
 		return nil
 	}
 	return errors
 }
 
-func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
+func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Value {
 	for v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 	if v.Kind() == reflect.Invalid {
-		return
+		return nil
 	}
 
 	t := v.Type()
@@ -124,23 +127,44 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 		ev = envUpperConfigs[strings.ToUpper(prefix)]
 	}
 	if ev != "" {
-		if v.CanSet() {
-			newValue := reflect.New(t)
-			err := json.Unmarshal([]byte(ev), newValue.Interface())
-			if err != nil && t.Kind() == reflect.String {
-				v.SetString(ev)
-			} else if err == nil {
-				v.Set(newValue.Elem())
-			} else {
-				*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
-			}
+		//fmt.Println("    ^^^^^^^", prefix, v.CanSet())
+		newValue := reflect.New(t)
+		var resultValue reflect.Value
+		err := json.Unmarshal([]byte(ev), newValue.Interface())
+		if err != nil && t.Kind() == reflect.String {
+			//v.SetString(ev)
+			resultValue = reflect.ValueOf(ev)
+		} else if err == nil {
+			//v.Set(newValue.Elem())
+			resultValue = newValue.Elem()
 		} else {
-			*errors = append(*errors, errors2.New(fmt.Sprint("Can't set config because CanSet() == false",
-				", prefix:", prefix,
-				", event:", ev,
-				", varType:", fmt.Sprint(t),
-				", value:", toString(v))))
+			*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
 		}
+
+		if v.CanSet() {
+			v.Set(resultValue)
+			return nil
+		} else {
+			return &resultValue
+		}
+
+		//if v.CanSet() {
+		//	newValue := reflect.New(t)
+		//	err := json.Unmarshal([]byte(ev), newValue.Interface())
+		//	if err != nil && t.Kind() == reflect.String {
+		//		v.SetString(ev)
+		//	} else if err == nil {
+		//		v.Set(newValue.Elem())
+		//	} else {
+		//		*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
+		//	}
+		//} else {
+		//	*errors = append(*errors, errors2.New(fmt.Sprint("Can't set config because CanSet() == false",
+		//		", prefix:", prefix,
+		//		", event:", ev,
+		//		", varType:", fmt.Sprint(t),
+		//		", value:", toString(v))))
+		//}
 	}
 
 	if t.Kind() == reflect.Struct {
@@ -148,7 +172,10 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 			if v.Field(i).Kind() == reflect.Ptr && v.Field(i).IsNil() {
 				v.Field(i).Set(reflect.New(v.Field(i).Type().Elem()))
 			}
-			makeEnvConfig(prefix+"_"+v.Type().Field(i).Name, v.Field(i), errors)
+			resultValue := makeEnvConfig(prefix+"_"+v.Type().Field(i).Name, v.Field(i), errors)
+			if resultValue != nil && v.Field(i).CanSet() {
+				v.Field(i).Set(*resultValue)
+			}
 		}
 	} else if t.Kind() == reflect.Map {
 		// 查找 环境变量 或 env.json 中是否有配置项
@@ -158,7 +185,11 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 				if strings.HasPrefix(k1, findPrefix) || strings.HasPrefix(strings.ToUpper(k1), strings.ToUpper(findPrefix)) {
 					findPostfix := k1[len(findPrefix):]
 					a1 := strings.Split(findPostfix, "_")
-					k2 := strings.ToLower(a1[0])
+					k2 := ""
+					if len(a1) > 0 {
+						//k2 := strings.ToLower(a1[0])
+						k2 = a1[0]
+					}
 					if k2 != "" && v.MapIndex(reflect.ValueOf(k2)).Kind() == reflect.Invalid {
 						var v1 reflect.Value
 						if t.Elem().Kind() == reflect.Ptr {
@@ -169,22 +200,31 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) {
 						if len(v.MapKeys()) == 0 {
 							v.Set(reflect.MakeMap(t))
 						}
-						v.SetMapIndex(reflect.ValueOf(strings.ToLower(a1[0])), v1)
+						v.SetMapIndex(reflect.ValueOf(k2), v1)
 					}
 				}
 			}
 		}
 		for _, mk := range v.MapKeys() {
-			makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
+			//fmt.Println("    ^^^^^^^", prefix+"_"+toString(mk), mk, v.MapIndex(mk))
+			resultValue := makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
+			if resultValue != nil {
+				v.SetMapIndex(mk, *resultValue)
+			}
 		}
 	} else if t.Kind() == reflect.Slice {
 		for i := 0; i < v.Len(); i++ {
 			if v.Index(i).Kind() == reflect.Ptr && v.Index(i).IsNil() {
 				v.Index(i).Set(reflect.New(v.Index(i).Type().Elem()))
 			}
-			makeEnvConfig(fmt.Sprint(prefix, "_", i), v.Index(i), errors)
+			resultValue := makeEnvConfig(fmt.Sprint(prefix, "_", i), v.Index(i), errors)
+			if resultValue != nil && v.Index(i).CanSet() {
+				v.Index(i).Set(*resultValue)
+			}
 		}
 	}
+
+	return nil
 }
 
 func toString(v reflect.Value) string {
