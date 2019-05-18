@@ -141,6 +141,10 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 			*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
 		}
 
+		if !resultValue.IsValid() {
+			return nil
+		}
+
 		if v.CanSet() {
 			v.Set(resultValue)
 			return nil
