@@ -21,6 +21,10 @@ var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
 var inited = false
 
+type Configurable interface {
+	ConfigureBy(setting string)
+}
+
 func initConfig() {
 	envConf := map[string]interface{}{}
 	LoadConfig("env", &envConf)
@@ -126,19 +130,33 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 	if ev == "" {
 		ev = envUpperConfigs[strings.ToUpper(prefix)]
 	}
+	//fmt.Println("    ^^^^^^^", prefix, ev)
+
 	if ev != "" {
 		//fmt.Println("    ^^^^^^^", prefix, v.CanSet())
 		newValue := reflect.New(t)
 		var resultValue reflect.Value
-		err := json.Unmarshal([]byte(ev), newValue.Interface())
-		if err != nil && t.Kind() == reflect.String {
-			//v.SetString(ev)
-			resultValue = reflect.ValueOf(ev)
-		} else if err == nil {
-			//v.Set(newValue.Elem())
-			resultValue = newValue.Elem()
+
+		//injectObjValue := reflect.ValueOf(injectObj)
+		//setLoggerMethod, found := injectObjValue.Type().MethodByName("ConfigureBy")
+		//if found && setLoggerMethod.Type.NumIn() == 2 && setLoggerMethod.Type.In(1).String() == "*log.Logger" {
+		//	setLoggerMethod.Func.Call([]reflect.Value{injectObjValue, reflect.ValueOf(requestLogger)})
+		//}
+
+		configureMethod, found := v.Addr().Type().MethodByName("ConfigureBy")
+		if !strings.HasPrefix(ev, "{") && found && configureMethod.Type.NumIn() == 2 && configureMethod.Type.In(1).Kind() == reflect.String {
+			configureMethod.Func.Call([]reflect.Value{v.Addr(), reflect.ValueOf(ev)})
 		} else {
-			*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
+			err := json.Unmarshal([]byte(ev), newValue.Interface())
+			if err != nil && t.Kind() == reflect.String {
+				//v.SetString(ev)
+				resultValue = reflect.ValueOf(ev)
+			} else if err == nil {
+				//v.Set(newValue.Elem())
+				resultValue = newValue.Elem()
+			} else {
+				*errors = append(*errors, errors2.New(fmt.Sprint(err.Error(), ", prefix:", prefix, ", event:", ev)))
+			}
 		}
 
 		if !resultValue.IsValid() {
@@ -173,7 +191,11 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 
 	if t.Kind() == reflect.Struct {
 		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).Name[0] > 90 {
+				continue
+			}
 			if v.Field(i).Kind() == reflect.Ptr && v.Field(i).IsNil() {
+				//fmt.Println("      ^^^^^^^1", prefix, v.Type().Field(i).Name, v.Field(i).String())
 				v.Field(i).Set(reflect.New(v.Field(i).Type().Elem()))
 			}
 			resultValue := makeEnvConfig(prefix+"_"+v.Type().Field(i).Name, v.Field(i), errors)
@@ -186,7 +208,9 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 		if t.Elem().Kind() != reflect.Interface {
 			findPrefix := prefix + "_"
 			for k1 := range envConfigs {
+				//fmt.Println("      ^^^^^^^ Map", prefix, k1)
 				if strings.HasPrefix(k1, findPrefix) || strings.HasPrefix(strings.ToUpper(k1), strings.ToUpper(findPrefix)) {
+					//fmt.Println("      ^^^^^^^ Map", prefix, k1)
 					findPostfix := k1[len(findPrefix):]
 					a1 := strings.Split(findPostfix, "_")
 					k2 := ""
@@ -204,13 +228,13 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 						if len(v.MapKeys()) == 0 {
 							v.Set(reflect.MakeMap(t))
 						}
+						//fmt.Println("        ^^^^^^^ Map", prefix, k1, k2)
 						v.SetMapIndex(reflect.ValueOf(k2), v1)
 					}
 				}
 			}
 		}
 		for _, mk := range v.MapKeys() {
-			//fmt.Println("    ^^^^^^^", prefix+"_"+toString(mk), mk, v.MapIndex(mk))
 			resultValue := makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
 			if resultValue != nil {
 				v.SetMapIndex(mk, *resultValue)
