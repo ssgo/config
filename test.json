@@ -1,8 +1,9 @@
 {
   "name": "test-config",
   "list": {
-    "aaa" :{
+    "aaa": {
       "name": "111"
     }
-  }
+  },
+  "duration": "100s"
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	errors2 "errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os/user"
 	"reflect"
 	"strings"
+	"time"
 )
 
 type openStatusType int
@@ -20,6 +22,30 @@ const YML openStatusType = 2
 var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
 var inited = false
+
+type Duration time.Duration
+
+func (tm *Duration) MarshalJSON() ([]byte, error) {
+	return []byte(string(*tm)), nil
+}
+
+func (tm *Duration) UnmarshalJSON(value []byte) error {
+	result, err := time.ParseDuration(string(bytes.Trim(value, "\"")))
+	if err == nil {
+		*tm = Duration(result)
+	}
+	return err
+}
+
+func (tm *Duration) TimeDuration() time.Duration {
+	return time.Duration(*tm)
+}
+
+//var v1 time.Duration
+//json.Unmarshal([]byte("100s"), &v1)
+//if v1 != 100*time.Second {
+//	t.Error("time", "100s", "is", v1, "!=", int64(100*time.Second))
+//}
 
 type Configurable interface {
 	ConfigureBy(setting string)

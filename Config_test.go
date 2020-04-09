@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 type TestList struct {
@@ -27,10 +28,11 @@ func TestForMap(t *testing.T) {
 }
 
 type testConfType struct {
-	Name  string
-	Sets  []int
-	List  map[string]*TestList
-	List2 []string
+	Name     string
+	Sets     []int
+	List     map[string]*TestList
+	List2    []string
+	Duration Duration
 }
 
 func TestForStruct(t *testing.T) {
@@ -53,6 +55,12 @@ func TestForStruct(t *testing.T) {
 	}
 	if testConf.List == nil || testConf.List["ddd"] == nil || testConf.List["ddd"].Name != "444" {
 		t.Error("ddd in test.json failed", testConf.List["ddd"])
+	}
+	if time.Duration(testConf.Duration) != 100*time.Second {
+		t.Error("time in test.json failed", testConf.Duration.TimeDuration())
+	}
+	if string(testConf.Duration) != string(100*time.Second) {
+		t.Error("time in test.json failed", testConf.Duration.TimeDuration())
 	}
 }
 
