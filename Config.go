@@ -25,6 +25,13 @@ var inited = false
 
 type Duration time.Duration
 
+func (tm *Duration) ConfigureBy(setting string) {
+	result, err := time.ParseDuration(setting)
+	if err == nil {
+		*tm = Duration(result)
+	}
+}
+
 func (tm *Duration) MarshalJSON() ([]byte, error) {
 	return []byte(string(*tm)), nil
 }
@@ -159,7 +166,7 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 	//fmt.Println("    ^^^^^^^", prefix, ev)
 
 	if ev != "" {
-		//fmt.Println("    ^^^^^^^", prefix, v.CanSet(), v.CanAddr())
+		//fmt.Println("    ^^^^^^^1", prefix, v.CanSet(), v.CanAddr())
 		newValue := reflect.New(t)
 		var resultValue reflect.Value
 
@@ -171,14 +178,18 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 
 		foundConfigureBy := false
 		if v.CanAddr() {
-			var configureMethod reflect.Method
-			configureMethod, foundConfigureBy = v.Addr().Type().MethodByName("ConfigureBy")
-			if !strings.HasPrefix(ev, "{") && foundConfigureBy && configureMethod.Type.NumIn() == 2 && configureMethod.Type.In(1).Kind() == reflect.String {
+			configureMethod, found := v.Addr().Type().MethodByName("ConfigureBy")
+			//fmt.Println("      ^^^^^^^2", prefix, v.Type().String(), found, configureMethod)
+			if !strings.HasPrefix(ev, "{") && found && configureMethod.Type.NumIn() == 2 && configureMethod.Type.In(1).Kind() == reflect.String {
+				//fmt.Println("      ^^^^^^^2", prefix, v.CanSet(), v.CanAddr())
 				configureMethod.Func.Call([]reflect.Value{v.Addr(), reflect.ValueOf(ev)})
+				foundConfigureBy = found
 			}
 		}
 		if !foundConfigureBy {
+			//fmt.Println("      ^^^^^^^3", prefix, v.CanSet(), v.CanAddr())
 			err := json.Unmarshal([]byte(ev), newValue.Interface())
+			//fmt.Println("      ^^^^^^^4", err)
 			if err != nil && t.Kind() == reflect.String {
 				//v.SetString(ev)
 				resultValue = reflect.ValueOf(ev)
