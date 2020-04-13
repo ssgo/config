@@ -159,7 +159,7 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 	//fmt.Println("    ^^^^^^^", prefix, ev)
 
 	if ev != "" {
-		//fmt.Println("    ^^^^^^^", prefix, v.CanSet())
+		//fmt.Println("    ^^^^^^^", prefix, v.CanSet(), v.CanAddr())
 		newValue := reflect.New(t)
 		var resultValue reflect.Value
 
@@ -169,10 +169,15 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 		//	setLoggerMethod.Func.Call([]reflect.Value{injectObjValue, reflect.ValueOf(requestLogger)})
 		//}
 
-		configureMethod, found := v.Addr().Type().MethodByName("ConfigureBy")
-		if !strings.HasPrefix(ev, "{") && found && configureMethod.Type.NumIn() == 2 && configureMethod.Type.In(1).Kind() == reflect.String {
-			configureMethod.Func.Call([]reflect.Value{v.Addr(), reflect.ValueOf(ev)})
-		} else {
+		foundConfigureBy := false
+		if v.CanAddr() {
+			var configureMethod reflect.Method
+			configureMethod, foundConfigureBy = v.Addr().Type().MethodByName("ConfigureBy")
+			if !strings.HasPrefix(ev, "{") && foundConfigureBy && configureMethod.Type.NumIn() == 2 && configureMethod.Type.In(1).Kind() == reflect.String {
+				configureMethod.Func.Call([]reflect.Value{v.Addr(), reflect.ValueOf(ev)})
+			}
+		}
+		if !foundConfigureBy {
 			err := json.Unmarshal([]byte(ev), newValue.Interface())
 			if err != nil && t.Kind() == reflect.String {
 				//v.SetString(ev)
