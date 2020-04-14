@@ -44,15 +44,26 @@ func (tm *Duration) UnmarshalJSON(value []byte) error {
 	return err
 }
 
+func (tm *Duration) MarshalYAML() (interface{}, error) {
+	return string(*tm), nil
+}
+
+func (tm *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	value := ""
+	err := unmarshal(&value)
+	if err != nil {
+		return err
+	}
+	result, err := time.ParseDuration(value)
+	if err == nil {
+		*tm = Duration(result)
+	}
+	return err
+}
+
 func (tm *Duration) TimeDuration() time.Duration {
 	return time.Duration(*tm)
 }
-
-//var v1 time.Duration
-//json.Unmarshal([]byte("100s"), &v1)
-//if v1 != 100*time.Second {
-//	t.Error("time", "100s", "is", v1, "!=", int64(100*time.Second))
-//}
 
 type Configurable interface {
 	ConfigureBy(setting string)
