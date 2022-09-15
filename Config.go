@@ -321,9 +321,16 @@ func initEnvConfigFromFile(prefix string, v reflect.Value) {
 		v = v.Elem()
 	}
 	t := v.Type()
+
+	if t == nil {
+		return
+	}
 	if t.Kind() == reflect.Interface {
 		t = reflect.TypeOf(v.Interface())
 		v = reflect.ValueOf(v.Interface())
+	}
+	if t == nil {
+		return
 	}
 	if t.Kind() == reflect.Map {
 		if prefix != "" {
