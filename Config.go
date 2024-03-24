@@ -5,19 +5,20 @@ import (
 	"encoding/json"
 	errors2 "errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
+	"github.com/ssgo/u"
 	"os"
 	"os/user"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 )
 
-type openStatusType int
-
-const NONE openStatusType = 0
-const JSON openStatusType = 1
-const YML openStatusType = 2
+//type openStatusType int
+//
+//const NONE openStatusType = 0
+//const JSON openStatusType = 1
+//const YML openStatusType = 2
 
 var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
@@ -33,7 +34,7 @@ func (tm *Duration) ConfigureBy(setting string) {
 }
 
 func (tm *Duration) MarshalJSON() ([]byte, error) {
-	return []byte(string(*tm)), nil
+	return []byte(time.Duration(*tm).String()), nil
 }
 
 func (tm *Duration) UnmarshalJSON(value []byte) error {
@@ -45,7 +46,7 @@ func (tm *Duration) UnmarshalJSON(value []byte) error {
 }
 
 func (tm *Duration) MarshalYAML() (interface{}, error) {
-	return string(*tm), nil
+	return time.Duration(*tm).String(), nil
 }
 
 func (tm *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -100,54 +101,57 @@ func LoadConfig(name string, conf interface{}) []error {
 		initConfig()
 	}
 
-	var file *os.File
-	openStatus := NONE
+	//var file *os.File
+	//openStatus := NONE
 	lenOsArgs := len(os.Args)
+	filename := ""
 	if lenOsArgs >= 1 {
-		execPath := os.Args[0]
-		pos := strings.LastIndex(os.Args[0], string(os.PathSeparator))
-		if pos != -1 {
-			execPath = os.Args[0][0:pos]
-		}
-		//file, err = os.Open(execPath + "/" + name + ".json")
-		file, openStatus = openFile(execPath + "/" + name)
+		execPath := filepath.Dir(os.Args[0])
+		//file, openStatus = openFile(execPath + "/" + name)
+		filename = checkFile(filepath.Join(execPath, name))
 	}
 	//if err != nil || lenOsArgs < 1 {
-	if file == nil || lenOsArgs < 1 {
+	if filename == "" {
 		//file, err = os.Open(name + ".json")
-		file, openStatus = openFile(name)
+		//file, openStatus = openFile(name)
+		filename = checkFile(name)
 		//if err != nil {
-		if file == nil {
+		if filename == "" {
 			//file, err = os.Open("../" + name + ".json")
-			file, openStatus = openFile("../" + name)
+			//file, openStatus = openFile("../" + name)
+			filename = checkFile(filepath.Join("..", name))
 			//if err != nil {
-			if file == nil {
+			if filename == "" {
 				u, _ := user.Current()
 				if u != nil {
 					//file, err = os.Open(u.HomeDir + "/" + name + ".json")
-					file, openStatus = openFile(u.HomeDir + "/" + name)
+					//file, openStatus = openFile(u.HomeDir + "/" + name)
+					filename = checkFile(filepath.Join(u.HomeDir, name))
 				}
 			}
 		}
 	}
 
 	errors := make([]error, 0)
-	if file != nil {
-		if openStatus == YML {
-			decoder := yaml.NewDecoder(file)
-			err := decoder.Decode(conf)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			_ = file.Close()
-			//fmt.Println(file.Name(), conf)
-		} else {
-			decoder := json.NewDecoder(file)
-			err := decoder.Decode(conf)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			_ = file.Close()
+	if filename != "" {
+		//if openStatus == YML {
+		//	decoder := yaml.NewDecoder(file)
+		//	err := decoder.Decode(conf)
+		//	if err != nil {
+		//		errors = append(errors, err)
+		//	}
+		//	_ = file.Close()
+		//	//fmt.Println(file.Name(), conf)
+		//} else {
+		//	decoder := json.NewDecoder(file)
+		//	err := decoder.Decode(conf)
+		//	if err != nil {
+		//		errors = append(errors, err)
+		//	}
+		//	_ = file.Close()
+		//}
+		if err := u.Load(filename, conf); err != nil {
+			errors = append(errors, err)
 		}
 	}
 
@@ -351,23 +355,32 @@ func initEnvConfigFromFile(prefix string, v reflect.Value) {
 	}
 }
 
-func openFile(filePrefix string) (*os.File, openStatusType) {
-
-	fi, err := os.Stat(filePrefix + ".yml")
-	if err == nil && fi != nil {
-		file, err := os.Open(filePrefix + ".yml")
-		if err == nil && file != nil {
-			return file, YML
-		}
+func checkFile(filePrefix string) string {
+	if u.FileExists(filePrefix + ".yml") {
+		return filePrefix + ".yml"
+	} else if u.FileExists(filePrefix + ".json") {
+		return filePrefix + ".json"
 	}
-
-	fi, err = os.Stat(filePrefix + ".json")
-	if err == nil && fi != nil {
-		file, err := os.Open(filePrefix + ".json")
-		if err == nil && file != nil {
-			return file, JSON
-		}
-	}
-
-	return nil, NONE
+	return ""
 }
+
+//func openFile(filePrefix string) (*os.File, openStatusType) {
+//
+//	fi, err := os.Stat(filePrefix + ".yml")
+//	if err == nil && fi != nil {
+//		file, err := os.Open(filePrefix + ".yml")
+//		if err == nil && file != nil {
+//			return file, YML
+//		}
+//	}
+//
+//	fi, err = os.Stat(filePrefix + ".json")
+//	if err == nil && fi != nil {
+//		file, err := os.Open(filePrefix + ".json")
+//		if err == nil && file != nil {
+//			return file, JSON
+//		}
+//	}
+//
+//	return nil, NONE
+//}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/ssgo/u"
 	"os"
 	"testing"
 	"time"
@@ -59,14 +60,93 @@ func TestForStruct(t *testing.T) {
 	if time.Duration(testConf.Duration) != 100*time.Second {
 		t.Error("time in test.json failed", testConf.Duration.TimeDuration())
 	}
-	if string(testConf.Duration) != string(100*time.Second) {
-		t.Error("time in test.json failed", testConf.Duration.TimeDuration())
+	if time.Duration(testConf.Duration).String() != (100 * time.Second).String() {
+		t.Error("time in test.json failed", testConf.Duration.TimeDuration(), time.Duration(testConf.Duration).String())
 	}
 }
 
 func TestForYml(t *testing.T) {
 	testConf := testConfType{}
 	_ = LoadConfig("test2", &testConf)
+	if testConf.Name != "test-config" {
+		t.Error("name in test.yml failed", testConf.Name)
+	}
+	if len(testConf.Sets) != 3 || testConf.Sets[1] != 2 {
+		t.Error("sets in test.yml failed", testConf.Sets)
+	}
+	if testConf.List == nil || testConf.List["aaa"].Name != "222" {
+		t.Error("map in test.yml failed", testConf.List["aaa"])
+	}
+	if testConf.List2 == nil || len(testConf.List2) != 2 {
+		t.Error("list2 in test.yml failed", testConf.List["aaa"])
+	}
+	if testConf.List != nil && (testConf.List["bbb"] == nil || testConf.List["bbb"].Name != "xxx") {
+		t.Error("map in env.yml failed", testConf.List, testConf.List["bbb"])
+	}
+}
+
+func TestForMemFile(t *testing.T) {
+	u.AddFileToMemory(u.MemFile{
+		Name:    "test3.yml",
+		ModTime: time.Now(),
+		IsDir:   false,
+		Data: []byte(`name: test-config
+list:
+  aaa:
+    name: 111
+list2:
+  - ls -l /
+  - cp a b
+`)})
+	u.AddFileToMemory(u.MemFile{
+		Name:    "env.yml",
+		ModTime: time.Now(),
+		IsDir:   false,
+		Data: []byte(`test:
+  list:
+    aaa:
+      name: "222"
+    bbb:
+      name: xxx
+  list2:
+    aaa: 111
+
+TEST_SETS:
+  - 1
+  - 2
+  - 3
+
+test2:
+  list:
+    aaa:
+      name: "222"
+    bbb:
+      name: xxx
+  list2:
+    aaa: 111
+
+TEST2_SETS:
+  - 1
+  - 2
+  - 3
+
+test3:
+  list:
+    aaa:
+      name: "222"
+    bbb:
+      name: xxx
+  list2:
+    aaa: 111
+
+TEST3_SETS:
+  - 1
+  - 2
+  - 3
+`)})
+	ResetConfigEnv()
+	testConf := testConfType{}
+	_ = LoadConfig("test3", &testConf)
 	if testConf.Name != "test-config" {
 		t.Error("name in test.yml failed", testConf.Name)
 	}

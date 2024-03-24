@@ -2,4 +2,6 @@ module github.com/ssgo/config
 
 go 1.12
 
-require gopkg.in/yaml.v3 v3.0.1
+require (
+	github.com/ssgo/u v1.7.3 // indirect
+)
