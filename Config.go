@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	errors2 "errors"
 	"fmt"
-	"github.com/ssgo/u"
 	"os"
-	"os/user"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/ssgo/u"
 )
 
 //type openStatusType int
@@ -95,69 +95,51 @@ func ResetConfigEnv() {
 	initConfig()
 }
 
+func searchFile(checkPath, name string, searched *map[string]bool) string {
+	for {
+		if !(*searched)[checkPath] {
+			(*searched)[checkPath] = true
+			if filename := checkFile(filepath.Join(checkPath, name)); filename != "" {
+				return filename
+			}
+		}
+		oldPath := checkPath
+		checkPath = filepath.Dir(oldPath)
+		if oldPath == checkPath {
+			return ""
+		}
+	}
+}
+
 func LoadConfig(name string, conf interface{}) []error {
 	if !inited {
 		inited = true
 		initConfig()
 	}
 
-	//var file *os.File
-	//openStatus := NONE
-	lenOsArgs := len(os.Args)
-	filename := ""
-	if lenOsArgs >= 1 {
-		execPath := filepath.Dir(os.Args[0])
-		//file, openStatus = openFile(execPath + "/" + name)
-		filename = checkFile(filepath.Join(execPath, name))
-	}
-	//if err != nil || lenOsArgs < 1 {
+	searched := map[string]bool{}
+	// search current path
+	currentPath, _ := os.Getwd()
+	filename := searchFile(currentPath, name, &searched)
 	if filename == "" {
-		//file, err = os.Open(name + ".json")
-		//file, openStatus = openFile(name)
-		filename = checkFile(name)
-		//if err != nil {
+		// search exec path
+		execPath, _ := filepath.Abs(os.Args[0])
+		filename = searchFile(filepath.Dir(execPath), name, &searched)
 		if filename == "" {
-			//file, err = os.Open("../" + name + ".json")
-			//file, openStatus = openFile("../" + name)
-			filename = checkFile(filepath.Join("..", name))
-			//if err != nil {
-			if filename == "" {
-				u, _ := user.Current()
-				if u != nil {
-					//file, err = os.Open(u.HomeDir + "/" + name + ".json")
-					//file, openStatus = openFile(u.HomeDir + "/" + name)
-					filename = checkFile(filepath.Join(u.HomeDir, name))
-				}
-			}
+			// search user home path
+			homePath, _ := os.UserHomeDir()
+			filename = checkFile(filepath.Join(homePath, name))
 		}
 	}
 
 	errors := make([]error, 0)
 	if filename != "" {
-		//if openStatus == YML {
-		//	decoder := yaml.NewDecoder(file)
-		//	err := decoder.Decode(conf)
-		//	if err != nil {
-		//		errors = append(errors, err)
-		//	}
-		//	_ = file.Close()
-		//	//fmt.Println(file.Name(), conf)
-		//} else {
-		//	decoder := json.NewDecoder(file)
-		//	err := decoder.Decode(conf)
-		//	if err != nil {
-		//		errors = append(errors, err)
-		//	}
-		//	_ = file.Close()
-		//}
-		if err := u.Load(filename, conf); err != nil {
+		if err := u.LoadX(filename, conf); err != nil {
 			errors = append(errors, err)
 		}
 	}
 
 	makeEnvConfig(name, reflect.ValueOf(conf), &errors)
-	//b, _ := json.MarshalIndent(conf, "", "  ")
-	//fmt.Println(string(b))
 
 	if len(errors) == 0 {
 		return nil
