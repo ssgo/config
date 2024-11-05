@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -84,9 +85,6 @@ func initConfig() {
 	for k1, v1 := range envConfigs {
 		envUpperConfigs[strings.ToUpper(k1)] = v1
 	}
-
-	//b, _ := json.MarshalIndent(envUpperConfigs, "", "  ")
-	//fmt.Println(string(b))
 }
 
 func ResetConfigEnv() {
@@ -111,6 +109,8 @@ func searchFile(checkPath, name string, searched *map[string]bool) string {
 	}
 }
 
+var varNameMatcher = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+):`)
+
 func LoadConfig(name string, conf interface{}) []error {
 	if !inited {
 		inited = true
@@ -134,12 +134,22 @@ func LoadConfig(name string, conf interface{}) []error {
 
 	errors := make([]error, 0)
 	if filename != "" {
-		if err := u.LoadX(filename, conf); err != nil {
-			errors = append(errors, err)
+		if strings.HasSuffix(filename, "yml") || strings.HasSuffix(filename, "yaml") {
+			confStr := u.ReadFileN(filename)
+			confStr = varNameMatcher.ReplaceAllStringFunc(confStr, func(s string) string {
+				return strings.ToLower(s)
+			})
+			u.UnYaml(confStr, conf)
+		} else {
+			if err := u.LoadJson(filename, conf); err != nil {
+				errors = append(errors, err)
+			}
 		}
 	}
 
-	makeEnvConfig(name, reflect.ValueOf(conf), &errors)
+	if name != "env" {
+		makeEnvConfig(name, reflect.ValueOf(conf), &errors)
+	}
 
 	if len(errors) == 0 {
 		return nil
@@ -160,7 +170,7 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 	if ev == "" {
 		ev = envUpperConfigs[strings.ToUpper(prefix)]
 	}
-	//fmt.Println("    ^^^^^^^", prefix, ev)
+	// fmt.Println("    ^^^^^^^", prefix, ev, t.Kind())
 
 	if ev != "" {
 		//fmt.Println("    ^^^^^^^1", prefix, v.CanSet(), v.CanAddr())
@@ -244,35 +254,35 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 		}
 	} else if t.Kind() == reflect.Map {
 		// 查找 环境变量 或 env.json 中是否有配置项
-		if t.Elem().Kind() != reflect.Interface {
-			findPrefix := prefix + "_"
-			for k1 := range envConfigs {
-				//fmt.Println("      ^^^^^^^ Map", prefix, k1)
-				if strings.HasPrefix(k1, findPrefix) || strings.HasPrefix(strings.ToUpper(k1), strings.ToUpper(findPrefix)) {
-					//fmt.Println("      ^^^^^^^ Map", prefix, k1)
-					findPostfix := k1[len(findPrefix):]
-					a1 := strings.Split(findPostfix, "_")
-					k2 := ""
-					if len(a1) > 0 {
-						//k2 := strings.ToLower(a1[0])
-						k2 = a1[0]
+		// if t.Elem().Kind() != reflect.Interface {
+		findPrefix := prefix + "_"
+		for k1 := range envConfigs {
+			// fmt.Println("      ^^^^^^^ Map", prefix, k1)
+			if strings.HasPrefix(k1, findPrefix) || strings.HasPrefix(strings.ToUpper(k1), strings.ToUpper(findPrefix)) {
+				// fmt.Println("      ^^^^^^^ Map", prefix, k1)
+				findPostfix := k1[len(findPrefix):]
+				a1 := strings.Split(findPostfix, "_")
+				k2 := ""
+				if len(a1) > 0 {
+					//k2 := strings.ToLower(a1[0])
+					k2 = a1[0]
+				}
+				if k2 != "" && v.MapIndex(reflect.ValueOf(k2)).Kind() == reflect.Invalid {
+					var v1 reflect.Value
+					if t.Elem().Kind() == reflect.Ptr {
+						v1 = reflect.New(t.Elem().Elem())
+					} else {
+						v1 = reflect.New(t.Elem()).Elem()
 					}
-					if k2 != "" && v.MapIndex(reflect.ValueOf(k2)).Kind() == reflect.Invalid {
-						var v1 reflect.Value
-						if t.Elem().Kind() == reflect.Ptr {
-							v1 = reflect.New(t.Elem().Elem())
-						} else {
-							v1 = reflect.New(t.Elem()).Elem()
-						}
-						if len(v.MapKeys()) == 0 {
-							v.Set(reflect.MakeMap(t))
-						}
-						//fmt.Println("        ^^^^^^^ Map", prefix, k1, k2)
-						v.SetMapIndex(reflect.ValueOf(k2), v1)
+					if len(v.MapKeys()) == 0 {
+						v.Set(reflect.MakeMap(t))
 					}
+					// fmt.Println("        ^^^^^^^ Map", prefix, k1, k2, v1)
+					v.SetMapIndex(reflect.ValueOf(k2), v1)
 				}
 			}
 		}
+		// }
 		for _, mk := range v.MapKeys() {
 			resultValue := makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
 			if resultValue != nil {

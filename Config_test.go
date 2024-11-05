@@ -1,10 +1,11 @@
 package config
 
 import (
-	"github.com/ssgo/u"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/ssgo/u"
 )
 
 type TestList struct {
