@@ -8,11 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/ssgo/u"
+	"gopkg.in/yaml.v3"
 )
 
 //type openStatusType int
@@ -50,18 +50,26 @@ func (tm *Duration) MarshalYAML() (interface{}, error) {
 	return time.Duration(*tm).String(), nil
 }
 
-func (tm *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	value := ""
-	err := unmarshal(&value)
-	if err != nil {
-		return err
-	}
-	result, err := time.ParseDuration(value)
+func (tm *Duration) UnmarshalYAML(value *yaml.Node) error {
+	result, err := time.ParseDuration(value.Value)
 	if err == nil {
 		*tm = Duration(result)
 	}
 	return err
 }
+
+// func (tm *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+// 	value := ""
+// 	err := unmarshal(&value)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	result, err := time.ParseDuration(value)
+// 	if err == nil {
+// 		*tm = Duration(result)
+// 	}
+// 	return err
+// }
 
 func (tm *Duration) TimeDuration() time.Duration {
 	return time.Duration(*tm)
@@ -109,7 +117,7 @@ func searchFile(checkPath, name string, searched *map[string]bool) string {
 	}
 }
 
-var varNameMatcher = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+):`)
+// var varNameMatcher = regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+):`)
 
 func LoadConfig(name string, conf interface{}) []error {
 	if !inited {
@@ -134,17 +142,18 @@ func LoadConfig(name string, conf interface{}) []error {
 
 	errors := make([]error, 0)
 	if filename != "" {
-		if strings.HasSuffix(filename, "yml") || strings.HasSuffix(filename, "yaml") {
-			confStr := u.ReadFileN(filename)
-			confStr = varNameMatcher.ReplaceAllStringFunc(confStr, func(s string) string {
-				return strings.ToLower(s)
-			})
-			u.UnYaml(confStr, conf)
-		} else {
-			if err := u.LoadJson(filename, conf); err != nil {
-				errors = append(errors, err)
-			}
-		}
+		// if strings.HasSuffix(filename, "yml") || strings.HasSuffix(filename, "yaml") {
+		// 	confStr := u.ReadFileN(filename)
+		// 	confStr = varNameMatcher.ReplaceAllStringFunc(confStr, func(s string) string {
+		// 		return strings.ToLower(s)
+		// 	})
+		// 	u.UnYaml(confStr, conf)
+		// } else {
+		// 	if err := u.LoadJson(filename, conf); err != nil {
+		// 		errors = append(errors, err)
+		// 	}
+		// }
+		u.LoadX(filename, conf)
 	}
 
 	if name != "env" {
@@ -173,6 +182,11 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 	// fmt.Println("    ^^^^^^^", prefix, ev, t.Kind())
 
 	if ev != "" {
+		if t.Kind() == reflect.Interface {
+			resultValue := reflect.ValueOf(ev)
+			return &resultValue
+		}
+
 		//fmt.Println("    ^^^^^^^1", prefix, v.CanSet(), v.CanAddr())
 		newValue := reflect.New(t)
 		var resultValue reflect.Value
@@ -285,6 +299,15 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 		// }
 		for _, mk := range v.MapKeys() {
 			resultValue := makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
+			// fmt.Println("        ^^^^^^^ Map", prefix, mk, resultValue)
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
+			// TODO 出现两次 相同的 key ************
 			if resultValue != nil {
 				v.SetMapIndex(mk, *resultValue)
 			}
