@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,8 @@ type testConfType struct {
 	List     map[string]*TestList
 	List2    []string
 	Duration Duration
+	Ext      map[string]interface{}
+	ExtList  []interface{}
 }
 
 func TestForStruct(t *testing.T) {
@@ -83,6 +86,12 @@ func TestForYml(t *testing.T) {
 	}
 	if testConf.List != nil && (testConf.List["bbb"] == nil || testConf.List["bbb"].Name != "xxx") {
 		t.Error("map in env.yml failed", testConf.List, testConf.List["bbb"])
+	}
+	if testConf.Ext == nil || testConf.Ext["bbb"] != "222" || testConf.Ext["ccc"] == nil || !strings.Contains(u.Json(testConf.Ext["ccc"]), "111") {
+		t.Error("map with any in env.yml failed", u.JsonP(testConf.Ext)+".")
+	}
+	if testConf.ExtList == nil || u.String(testConf.ExtList[1]) != "222" || testConf.ExtList[2] == nil || !strings.Contains(u.Json(testConf.ExtList[2]), "111") {
+		t.Error("list with any in env.yml failed", u.JsonP(testConf.ExtList)+".")
 	}
 }
 

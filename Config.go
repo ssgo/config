@@ -23,6 +23,7 @@ import (
 
 var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
+var envFullConfigs = map[string]interface{}{}
 var inited = false
 
 type Duration time.Duration
@@ -98,6 +99,7 @@ func initConfig() {
 func ResetConfigEnv() {
 	envConfigs = map[string]string{}
 	envUpperConfigs = map[string]string{}
+	envFullConfigs = map[string]interface{}{}
 	initConfig()
 }
 
@@ -298,8 +300,12 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 		}
 		// }
 		for _, mk := range v.MapKeys() {
+			// for any type and is nil, copy full value
 			resultValue := makeEnvConfig(prefix+"_"+toString(mk), v.MapIndex(mk), errors)
-			// fmt.Println("        ^^^^^^^ Map", prefix, mk, resultValue)
+			// fmt.Println("        ^^^^^^^ Map", prefix, mk, resultValue, "===")
+			// if mk.String() == "ccc" {
+			// 	fmt.Println(u.BCyan(u.JsonP(envUpperConfigs)))
+			// }
 			// TODO 出现两次 相同的 key ************
 			// TODO 出现两次 相同的 key ************
 			// TODO 出现两次 相同的 key ************
@@ -310,10 +316,23 @@ func makeEnvConfig(prefix string, v reflect.Value, errors *[]error) *reflect.Val
 			// TODO 出现两次 相同的 key ************
 			if resultValue != nil {
 				v.SetMapIndex(mk, *resultValue)
+			} else {
+				if v.MapIndex(mk).Kind() == reflect.Interface && v.MapIndex(mk).IsNil() {
+					if fullV, ok := envFullConfigs[strings.ToUpper(prefix+"_"+mk.String())]; ok {
+						v.SetMapIndex(mk, reflect.ValueOf(fullV))
+					}
+				}
 			}
 		}
 	} else if t.Kind() == reflect.Slice {
 		for i := 0; i < v.Len(); i++ {
+			// if v.Index(i).Kind() == reflect.Interface && v.Index(i).IsNil() {
+			// 	if fullV, ok := envFullConfigs[strings.ToUpper(prefix)]; ok {
+			// 		v.Index(i).Set(reflect.ValueOf(fullV))
+			// 		continue
+			// 	}
+			// }
+
 			if v.Index(i).Kind() == reflect.Ptr && v.Index(i).IsNil() {
 				v.Index(i).Set(reflect.New(v.Index(i).Type().Elem()))
 			}
@@ -352,6 +371,7 @@ func initEnvConfigFromFile(prefix string, v reflect.Value) {
 		return
 	}
 	if t.Kind() == reflect.Map {
+		envFullConfigs[strings.ToUpper(prefix)] = v.Interface()
 		if prefix != "" {
 			prefix += "_"
 		}
