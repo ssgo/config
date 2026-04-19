@@ -15,12 +15,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//type openStatusType int
-//
-//const NONE openStatusType = 0
-//const JSON openStatusType = 1
-//const YML openStatusType = 2
-
 var envConfigs = map[string]string{}
 var envUpperConfigs = map[string]string{}
 var envFullConfigs = map[string]interface{}{}
@@ -58,19 +52,6 @@ func (tm *Duration) UnmarshalYAML(value *yaml.Node) error {
 	}
 	return err
 }
-
-// func (tm *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
-// 	value := ""
-// 	err := unmarshal(&value)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	result, err := time.ParseDuration(value)
-// 	if err == nil {
-// 		*tm = Duration(result)
-// 	}
-// 	return err
-// }
 
 func (tm *Duration) TimeDuration() time.Duration {
 	return time.Duration(*tm)
